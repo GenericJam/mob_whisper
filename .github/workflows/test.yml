@@ -1,0 +1,70 @@
+name: tests
+
+# CI for the plugin's host-side Elixir surface — the same gate mob core runs,
+# so a PR gets a green check instead of relying only on each contributor's
+# local pre-push hook. The native code (c_src: the NIF, capture, vendored
+# whisper.cpp) is compiled by the host app's native build at deploy time, not
+# here; the session logic is tested against a scripted native layer
+# (test/support/fake_native.ex).
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: tests-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: Elixir ${{ matrix.elixir }} / OTP ${{ matrix.otp }}
+    runs-on: ubuntu-latest
+    env:
+      MIX_ENV: test
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - elixir: '1.19'
+            otp: '28'
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: erlef/setup-beam@v1
+        with:
+          elixir-version: ${{ matrix.elixir }}
+          otp-version: ${{ matrix.otp }}
+
+      - name: Cache deps + _build
+        uses: actions/cache@v4
+        with:
+          path: |
+            deps
+            _build
+          key: mix-${{ runner.os }}-${{ matrix.elixir }}-${{ matrix.otp }}-${{ hashFiles('**/mix.lock') }}
+          restore-keys: mix-${{ runner.os }}-${{ matrix.elixir }}-${{ matrix.otp }}-
+
+      # mob_speech isn't on Hex yet (its HEX_API_KEY is pending): build against
+      # its released git tag through mix.exs's MOB_SPEECH_PATH override until
+      # `mix hex.info mob_speech` finds it. Drop this step once it's published.
+      - name: mob_speech from its git tag while it isn't on Hex
+        run: |
+          if ! mix hex.info mob_speech 0.1.0 2>/dev/null | grep -q "Config:"; then
+            git clone --quiet --depth 1 --branch 0.1.0 https://github.com/GenericJam/mob_speech "$RUNNER_TEMP/mob_speech"
+            echo "MOB_SPEECH_PATH=$RUNNER_TEMP/mob_speech" >> "$GITHUB_ENV"
+          fi
+
+      - run: mix deps.get
+      - run: mix deps.compile
+      - run: mix compile --warnings-as-errors
+
+      - name: Format check
+        run: mix format --check-formatted
+
+      - name: Credo (strict)
+        run: mix credo --strict
+
+      - name: Tests
+        run: mix test --exclude macos_only --exclude requires_zig

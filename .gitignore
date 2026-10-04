@@ -1,0 +1,16 @@
+/_build/
+/cover/
+/deps/
+/doc/
+/.fetch
+erl_crash.dump
+*.ez
+*.beam
+/config/*.secret.exs
+.elixir_ls/
+mob.exs
+
+# Signature is regenerated fresh in CI on every release (never committed,
+# so it can't go stale). The .pub IS committed.
+priv/mob_plugin.sig
+/tmp/
