@@ -139,6 +139,10 @@ defmodule MobWhisper.EngineTest do
     refute_received {:native, :capture_start, []}
     refute_received {:native, :load_model, _}
     assert Process.whereis(MobWhisper.Server) == server
+
+    :ok = MobWhisper.prefetch(notify: self())
+    assert_receive {:mob_whisper, :model, {:error, :unavailable}}
+    refute_received {:native, :load_model, _}
   end
 
   test "a misconfigured model is :unavailable, not a crash" do

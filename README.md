@@ -44,8 +44,10 @@ reasons) is `MobSpeech`'s contract. `MobWhisper.transcribe/2` transcribes a
 Downloaded on first use from a pinned revision of
 [ggerganov/whisper.cpp](https://huggingface.co/ggerganov/whisper.cpp), checked
 against its SHA-256, and kept in the app's support directory. Call
-`MobWhisper.prefetch/0` at boot (or set `prefetch: true`) so the first
-dictation doesn't wait for it.
+`MobWhisper.prefetch/1` at boot (or set `prefetch: true`) so the first
+dictation doesn't wait for it; `prefetch(notify: self())` also reports
+`{:mob_whisper, :model, :ready}` or `{:mob_whisper, :model, {:error, reason}}`
+(`:network` when the download failed), so the app can tell the user.
 
 | `model:`   | File                    | Size    | Moto G 2021 (Snapdragon 662), stop → text |
 |------------|-------------------------|---------|-------------------------------------------|

@@ -33,7 +33,8 @@ struct Model {
     // the mutex at once, hence a set; each job removes its own id when done.
     std::atomic<uint64_t> next_id{0};
     std::mutex abort_mu;
-    std::unordered_set<uint64_t> aborted;
+    std::unordered_set<uint64_t> live;     // submitted, not yet finished
+    std::unordered_set<uint64_t> aborted;  // a subset of live
 };
 
 ErlNifResourceType *g_model_type = nullptr;
@@ -160,6 +161,7 @@ void job_thread(Job *job) {
     {
         std::lock_guard<std::mutex> lock(job->model->abort_mu);
         job->model->aborted.erase(job->id);
+        job->model->live.erase(job->id);
     }
     enif_release_resource(job->model);
     delete job;
@@ -189,6 +191,10 @@ ERL_NIF_TERM transcribe(ErlNifEnv *env, int, const ERL_NIF_TERM argv[]) {
     job->model = m;
     const uint64_t id = m->next_id.fetch_add(1) + 1;
     job->id = id;
+    {
+        std::lock_guard<std::mutex> lock(m->abort_mu);
+        m->live.insert(id);
+    }
     job->language = language;
     job->threads = threads;
     job->audio_ctx = audio_ctx;
@@ -207,6 +213,10 @@ ERL_NIF_TERM transcribe(ErlNifEnv *env, int, const ERL_NIF_TERM argv[]) {
     try {
         std::thread(job_thread, job).detach();
     } catch (const std::system_error &) {
+        {
+            std::lock_guard<std::mutex> lock(m->abort_mu);
+            m->live.erase(id);
+        }
         enif_release_resource(m);
         enif_free_env(job->msg_env);
         delete job;
@@ -230,7 +240,8 @@ ERL_NIF_TERM abort_transcription(ErlNifEnv *env, int, const ERL_NIF_TERM argv[])
     }
     {
         std::lock_guard<std::mutex> lock(m->abort_mu);
-        m->aborted.insert(id);
+        // An abort that arrives after the job finished has nothing to stop.
+        if (m->live.count(id) > 0) m->aborted.insert(id);
     }
     return atom(env, "ok");
 }

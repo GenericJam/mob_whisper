@@ -17,8 +17,10 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versioning: [S
   running transcription.
 - Models `:base_en` (default, base.en q5_1, 59.7 MB) and `:tiny_en` (tiny.en
   q8_0, 43.6 MB) downloaded on first use from a pinned Hugging Face revision and
-  SHA-256 checked; `{:file, path}` for your own. `MobWhisper.prefetch/0`,
-  `MobWhisper.transcribe/2`, `MobWhisper.status/0`.
+  SHA-256 checked; `{:file, path}` for your own. `MobWhisper.prefetch/1`
+  (`notify: pid` gets `{:mob_whisper, :model, :ready | {:error, reason}}`, e.g.
+  to tell the user a download failed), `MobWhisper.transcribe/2`,
+  `MobWhisper.status/0`.
 - Device-verified on a Moto G 2021 (Android 11, Snapdragon 662): Mac-spoken
   sentences transcribed correctly, 1.4-2.6 s from stop to text for 5-10 s of
   speech with `:base_en`. iOS builds but is not device-verified.

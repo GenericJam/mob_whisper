@@ -71,7 +71,9 @@ defmodule MobWhisper.Server do
   end
 
   @impl true
-  def handle_continue(:prefetch, state), do: {:noreply, ensure_model(state)}
+  def handle_continue(:prefetch, state) do
+    if state.native.loaded?(), do: {:noreply, ensure_model(state)}, else: {:noreply, state}
+  end
 
   @impl true
   def handle_call({:start, _pid, _opts}, _from, %{session: %{}} = state),
@@ -133,15 +135,26 @@ defmodule MobWhisper.Server do
   end
 
   @impl true
-  def handle_cast({:prefetch, nil}, state), do: {:noreply, ensure_model(state)}
-
   def handle_cast({:prefetch, pid}, %{model: model} = state) when model != nil do
-    send(pid, {:mob_whisper, :model, :ready})
+    if pid, do: send(pid, {:mob_whisper, :model, :ready})
     {:noreply, state}
   end
 
-  def handle_cast({:prefetch, pid}, state),
-    do: {:noreply, ensure_model(%{state | model_waiters: [{:notify, pid} | state.model_waiters]})}
+  def handle_cast({:prefetch, pid}, state) do
+    cond do
+      # Without the NIF there's nothing to load: don't download 60 MB to find out.
+      not state.native.loaded?() ->
+        if pid, do: send(pid, {:mob_whisper, :model, {:error, :unavailable}})
+        {:noreply, state}
+
+      pid ->
+        waiters = [{:notify, pid} | state.model_waiters]
+        {:noreply, ensure_model(%{state | model_waiters: waiters})}
+
+      true ->
+        {:noreply, ensure_model(state)}
+    end
+  end
 
   @impl true
   def handle_info({ref, result}, %{model_task: %Task{ref: ref}} = state) do
