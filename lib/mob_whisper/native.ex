@@ -6,7 +6,8 @@ defmodule MobWhisper.Native do
   #
   # transcribe/5 blocks the calling process until the text is ready. Sending
   # that process `:mob_whisper_abort` cancels the transcription: it returns
-  # {:error, :cancelled} promptly.
+  # {:error, :cancelled} at whisper.cpp's next abort check (after the encoder
+  # pass), or as soon as it gets the model if it was queued behind another job.
 
   @callback loaded?() :: boolean()
   @callback load_model(Path.t()) :: {:ok, reference()} | {:error, atom()}

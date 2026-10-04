@@ -128,7 +128,8 @@ defmodule MobWhisper do
     config = config()
     timeout = Keyword.get(opts, :timeout, :infinity)
 
-    with {:ok, language} <- Server.language(opts[:language], config[:model]),
+    with :ok <- if(available?(), do: :ok, else: {:error, :unavailable}),
+         {:ok, language} <- Server.language(opts[:language], config[:model]),
          {:ok, model} <- Server.model(timeout),
          {:ok, text} <-
            config[:native].transcribe(

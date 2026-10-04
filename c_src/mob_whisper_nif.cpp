@@ -13,6 +13,7 @@
 #include <string>
 #include <system_error>
 #include <thread>
+#include <unordered_set>
 #include <vector>
 
 #include "capture.h"
@@ -27,12 +28,12 @@ namespace {
 struct Model {
     whisper_context *ctx = nullptr;
     std::mutex mu;  // one whisper_full at a time per context
-    // Jobs are numbered from 1; abort/2 names the one to stop. A single slot
-    // is enough: the server runs one session job at a time, and naming the
-    // job (not "whatever runs next") means a stale abort can't hit a later
-    // job and an early one still stops a job queued behind the mutex.
+    // Jobs are numbered from 1; abort/2 names the one to stop, so a stale
+    // abort can't hit a later job. Several cancelled jobs can be queued behind
+    // the mutex at once, hence a set; each job removes its own id when done.
     std::atomic<uint64_t> next_id{0};
-    std::atomic<uint64_t> abort_id{0};
+    std::mutex abort_mu;
+    std::unordered_set<uint64_t> aborted;
 };
 
 ErlNifResourceType *g_model_type = nullptr;
@@ -104,7 +105,10 @@ struct Job {
     ERL_NIF_TERM ref;
 };
 
-bool aborted(const Job &job) { return job.model->abort_id.load() == job.id; }
+bool aborted(const Job &job) {
+    std::lock_guard<std::mutex> lock(job.model->abort_mu);
+    return job.model->aborted.count(job.id) > 0;
+}
 
 bool should_abort(void *data) { return aborted(*static_cast<Job *>(data)); }
 
@@ -153,6 +157,10 @@ void job_thread(Job *job) {
                                         job->ref, result);
     enif_send(nullptr, &job->caller, job->msg_env, msg);
     enif_free_env(job->msg_env);
+    {
+        std::lock_guard<std::mutex> lock(job->model->abort_mu);
+        job->model->aborted.erase(job->id);
+    }
     enif_release_resource(job->model);
     delete job;
 }
@@ -208,8 +216,11 @@ ERL_NIF_TERM transcribe(ErlNifEnv *env, int, const ERL_NIF_TERM argv[]) {
     return enif_make_tuple3(env, atom(env, "ok"), ref, enif_make_uint64(env, id));
 }
 
-// abort(Model, JobId) -> ok. Makes that transcribe/5 job reply {error, cancelled}
-// promptly, whether it is running or still waiting for the model.
+// abort(Model, JobId) -> ok. Makes that transcribe/5 job reply {error, cancelled}:
+// a job still queued behind another job's mutex replies as soon as it gets the
+// lock; a running one at whisper.cpp's next abort check (on a Moto G 2021 the
+// encoder pass isn't interrupted: a 7 s utterance aborted early still returned
+// after ~1.8 s instead of ~2.2 s).
 ERL_NIF_TERM abort_transcription(ErlNifEnv *env, int, const ERL_NIF_TERM argv[]) {
     Model *m = nullptr;
     ErlNifUInt64 id = 0;
@@ -217,7 +228,10 @@ ERL_NIF_TERM abort_transcription(ErlNifEnv *env, int, const ERL_NIF_TERM argv[])
         !enif_get_uint64(env, argv[1], &id)) {
         return enif_make_badarg(env);
     }
-    m->abort_id.store(id);
+    {
+        std::lock_guard<std::mutex> lock(m->abort_mu);
+        m->aborted.insert(id);
+    }
     return atom(env, "ok");
 }
 
@@ -227,7 +241,7 @@ ERL_NIF_TERM capture_start(ErlNifEnv *env, int, const ERL_NIF_TERM[]) {
     return err ? error(env, err) : atom(env, "ok");
 }
 
-// capture_stop() -> {ok, Pcm} | {error, not_capturing}
+// capture_stop() -> {ok, Pcm} | {error, not_capturing | audio}
 ERL_NIF_TERM capture_stop(ErlNifEnv *env, int, const ERL_NIF_TERM[]) {
     std::vector<int16_t> samples;
     const char *err = mob_whisper::capture_stop(samples);

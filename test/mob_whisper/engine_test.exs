@@ -130,12 +130,14 @@ defmodule MobWhisper.EngineTest do
     assert %{session: nil} = MobWhisper.status()
   end
 
-  test "without the NIF linked, start is :unavailable and the server survives" do
+  test "without the NIF linked, start and transcribe/2 are :unavailable and the server survives" do
     script(%{loaded?: false})
     server = Process.whereis(MobWhisper.Server)
 
     assert MobWhisper.start(self(), []) == {:error, :unavailable}
+    assert MobWhisper.transcribe(FakeNative.speech_pcm(500)) == {:error, :unavailable}
     refute_received {:native, :capture_start, []}
+    refute_received {:native, :load_model, _}
     assert Process.whereis(MobWhisper.Server) == server
   end
 
