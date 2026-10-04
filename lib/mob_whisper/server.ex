@@ -36,8 +36,8 @@ defmodule MobWhisper.Server do
   @spec cancel_session(pid()) :: :ok
   def cancel_session(pid), do: GenServer.call(__MODULE__, {:cancel, pid}, 10_000)
 
-  @spec prefetch() :: :ok
-  def prefetch, do: GenServer.cast(__MODULE__, :prefetch)
+  @spec prefetch(pid() | nil) :: :ok
+  def prefetch(notify \\ nil), do: GenServer.cast(__MODULE__, {:prefetch, notify})
 
   @spec model(timeout()) :: {:ok, reference()} | {:error, term()}
   def model(timeout), do: GenServer.call(__MODULE__, :model, timeout)
@@ -119,7 +119,7 @@ defmodule MobWhisper.Server do
     do: {:reply, {:ok, model}, state}
 
   def handle_call(:model, from, state),
-    do: {:noreply, ensure_model(%{state | model_waiters: [from | state.model_waiters]})}
+    do: {:noreply, ensure_model(%{state | model_waiters: [{:reply, from} | state.model_waiters]})}
 
   def handle_call(:status, _from, state) do
     status = %{
@@ -133,7 +133,15 @@ defmodule MobWhisper.Server do
   end
 
   @impl true
-  def handle_cast(:prefetch, state), do: {:noreply, ensure_model(state)}
+  def handle_cast({:prefetch, nil}, state), do: {:noreply, ensure_model(state)}
+
+  def handle_cast({:prefetch, pid}, %{model: model} = state) when model != nil do
+    send(pid, {:mob_whisper, :model, :ready})
+    {:noreply, state}
+  end
+
+  def handle_cast({:prefetch, pid}, state),
+    do: {:noreply, ensure_model(%{state | model_waiters: [{:notify, pid} | state.model_waiters]})}
 
   @impl true
   def handle_info({ref, result}, %{model_task: %Task{ref: ref}} = state) do
@@ -258,7 +266,7 @@ defmodule MobWhisper.Server do
   end
 
   defp model_ready(state, {:ok, model}) do
-    Enum.each(state.model_waiters, &GenServer.reply(&1, {:ok, model}))
+    Enum.each(state.model_waiters, &tell_waiter(&1, {:ok, model}))
     state = %{state | model: model, model_waiters: []}
 
     case state.session do
@@ -272,7 +280,7 @@ defmodule MobWhisper.Server do
       "mob_whisper: model #{inspect(state.model_spec)} unavailable: #{inspect(reason)}"
     )
 
-    Enum.each(state.model_waiters, &GenServer.reply(&1, {:error, reason}))
+    Enum.each(state.model_waiters, &tell_waiter(&1, {:error, reason}))
     state = %{state | model_error: reason, model_waiters: []}
 
     case state.session do
@@ -280,6 +288,13 @@ defmodule MobWhisper.Server do
       _ -> state
     end
   end
+
+  # model/1 callers get the model; prefetch(pid) gets a notice.
+  defp tell_waiter({:reply, from}, result), do: GenServer.reply(from, result)
+  defp tell_waiter({:notify, pid}, {:ok, _}), do: send(pid, {:mob_whisper, :model, :ready})
+
+  defp tell_waiter({:notify, pid}, {:error, reason}),
+    do: send(pid, {:mob_whisper, :model, {:error, speech_reason(reason)}})
 
   defp model_state(%{model: m}) when m != nil, do: :ready
   defp model_state(%{model_task: %Task{}}), do: :loading

@@ -235,6 +235,22 @@ defmodule MobWhisper.EngineTest do
     refute_receive {:speech, _, _}, 50
   end
 
+  test "prefetch(notify:) reports the model ready, at once when already loaded" do
+    :ok = MobWhisper.prefetch(notify: self())
+    assert_receive {:mob_whisper, :model, :ready}
+    assert_received {:native, :load_model, [@model_path]}
+
+    :ok = MobWhisper.prefetch(notify: self())
+    assert_receive {:mob_whisper, :model, :ready}
+    refute_received {:native, :load_model, _}
+  end
+
+  test "prefetch(notify:) reports a failed download as :network" do
+    script(%{load_model: {:error, {:download, :timeout}}})
+    :ok = MobWhisper.prefetch(notify: self())
+    assert_receive {:mob_whisper, :model, {:error, :network}}
+  end
+
   test "transcribe/2 transcribes a recording directly" do
     assert MobWhisper.transcribe(FakeNative.speech_pcm(1_000)) == {:ok, "hello world"}
   end

@@ -111,9 +111,14 @@ defmodule MobWhisper do
   @doc """
   Download (if needed) and load the configured model in the background, so the
   first recognition doesn't wait for it. Returns immediately.
+
+  Options: `notify: pid` sends that process `{:mob_whisper, :model, :ready}`
+  once the model is loaded (at once if it already is), or
+  `{:mob_whisper, :model, {:error, reason}}` (`:network` for a failed
+  download, `:unavailable` otherwise), e.g. to tell the user.
   """
-  @spec prefetch() :: :ok
-  def prefetch, do: Server.prefetch()
+  @spec prefetch(keyword()) :: :ok
+  def prefetch(opts \\ []), do: Server.prefetch(Keyword.get(opts, :notify))
 
   @doc """
   Transcribe a recording directly, without a session or the microphone:
