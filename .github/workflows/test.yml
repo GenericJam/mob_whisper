@@ -46,6 +46,16 @@ jobs:
           key: mix-${{ runner.os }}-${{ matrix.elixir }}-${{ matrix.otp }}-${{ hashFiles('**/mix.lock') }}
           restore-keys: mix-${{ runner.os }}-${{ matrix.elixir }}-${{ matrix.otp }}-
 
+      # mob_speech isn't on Hex yet (its HEX_API_KEY is pending): build against
+      # its released git tag through mix.exs's MOB_SPEECH_PATH override until
+      # `mix hex.info mob_speech` finds it. Drop this step once it's published.
+      - name: mob_speech from its git tag while it isn't on Hex
+        run: |
+          if ! mix hex.info mob_speech 0.1.0 2>/dev/null | grep -q "Config:"; then
+            git clone --quiet --depth 1 --branch 0.1.0 https://github.com/GenericJam/mob_speech "$RUNNER_TEMP/mob_speech"
+            echo "MOB_SPEECH_PATH=$RUNNER_TEMP/mob_speech" >> "$GITHUB_ENV"
+          fi
+
       - run: mix deps.get
       - run: mix deps.compile
       - run: mix compile --warnings-as-errors
