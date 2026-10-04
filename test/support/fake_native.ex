@@ -5,8 +5,9 @@ defmodule MobWhisper.FakeNative do
   returns that test's scripted result (defaults: capture works, the model
   loads, transcription returns "hello world").
 
-  Scripted results may be functions; they're called with the call's args, so
-  a test can block a transcription until it says so.
+  Scripted results may be functions; they're called with the call's args in
+  the calling process, so a test can block a transcription until it says so
+  (and see the `:mob_whisper_abort` message a cancel sends that process).
   """
 
   @behaviour MobWhisper.Native
@@ -20,7 +21,6 @@ defmodule MobWhisper.FakeNative do
       loaded?: true,
       load_model: {:ok, make_ref()},
       transcribe: {:ok, " hello world"},
-      abort: :ok,
       capture_start: :ok,
       capture_stop: {:ok, speech_pcm(2_000)}
     }
@@ -56,9 +56,6 @@ defmodule MobWhisper.FakeNative do
   @impl true
   def transcribe(model, pcm, language, threads, audio_ctx),
     do: call(:transcribe, [model, pcm, language, threads, audio_ctx])
-
-  @impl true
-  def abort(model), do: call(:abort, [model])
 
   @impl true
   def capture_start, do: call(:capture_start, [])

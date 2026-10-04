@@ -21,7 +21,8 @@ constexpr int kTargetRate = 16000;
 const char *capture_start();
 
 // Stop capturing and move the recording (16 kHz mono s16) into `out`.
-// Returns nullptr on success or "not_capturing".
+// Returns nullptr on success, "not_capturing", or "audio" when the stream
+// failed mid-recording (the truncated audio is discarded).
 const char *capture_stop(std::vector<int16_t> &out);
 
 // Down-mix is done by the platform code; this converts a mono recording made

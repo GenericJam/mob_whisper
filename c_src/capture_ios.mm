@@ -29,6 +29,7 @@ std::atomic<bool> g_running{false};
 std::vector<int16_t> g_samples;
 NSString *g_prev_category = nil;
 NSString *g_prev_mode = nil;
+AVAudioSessionCategoryOptions g_prev_options = 0;
 
 void on_input(void *, AudioQueueRef queue, AudioQueueBufferRef buffer, const AudioTimeStamp *,
               UInt32, const AudioStreamPacketDescription *) {
@@ -47,7 +48,10 @@ void restore_session() {
         AVAudioSession *s = [AVAudioSession sharedInstance];
         [s setActive:NO withOptions:AVAudioSessionSetActiveOptionNotifyOthersOnDeactivation error:nil];
         if (g_prev_category) {
-            [s setCategory:g_prev_category mode:(g_prev_mode ?: AVAudioSessionModeDefault) options:0 error:nil];
+            [s setCategory:g_prev_category
+                      mode:(g_prev_mode ?: AVAudioSessionModeDefault)
+                   options:g_prev_options
+                     error:nil];
         }
         [g_prev_category release];
         [g_prev_mode release];
@@ -67,6 +71,7 @@ const char *capture_start() {
         if (s.recordPermission != AVAudioSessionRecordPermissionGranted) return "permission";
         g_prev_category = [s.category copy];
         g_prev_mode = [s.mode copy];
+        g_prev_options = s.categoryOptions;
         NSError *err = nil;
         BOOL ok = [s setCategory:AVAudioSessionCategoryPlayAndRecord
                             mode:AVAudioSessionModeMeasurement

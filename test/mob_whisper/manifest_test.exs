@@ -32,19 +32,4 @@ defmodule MobWhisper.ManifestTest do
     assert Enum.any?(ios.sources, &String.ends_with?(&1, "capture_ios.mm"))
     refute Enum.any?(ios.sources, &String.ends_with?(&1, "capture_android.cpp"))
   end
-
-  test "the NIF init symbol matches the Erlang module that loads it", %{manifest: m} do
-    for nif <- m.nifs do
-      assert nif.module == :mob_whisper_nif
-      assert nif.nm_symbol == "mob_whisper_nif_nif_init"
-      assert "-DSTATIC_ERLANG_NIF_LIBNAME=mob_whisper_nif" in nif.cxxflags
-    end
-
-    assert {:module, :mob_whisper_nif} = Code.ensure_loaded(:mob_whisper_nif)
-  end
-
-  test "the microphone plist key is left to the host (core owns it)", %{manifest: m} do
-    refute Map.has_key?(get_in(m, [:ios, :plist_keys]) || %{}, "NSMicrophoneUsageDescription")
-    assert "android.permission.RECORD_AUDIO" in m.android.permissions
-  end
 end

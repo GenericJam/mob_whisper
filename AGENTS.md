@@ -3,7 +3,7 @@
 Offline speech-to-text plugin for Mob: whisper.cpp (vendored, CPU-only) as a
 `MobSpeech.Engine`. Also read `~/code/mob/AGENTS.md` and `~/AGENTS.md`.
 
-- `c_src/mob_whisper_nif.cpp` — NIF (`cpp_archive`, needs mob_dev ≥ 0.7.12).
+- `c_src/mob_whisper_nif.cpp` — NIF (`cpp_archive`, needs mob_dev ≥ 0.7.13).
   Transcription runs on a native thread and replies `{:mob_whisper_result, ref, result}`
   (Mob BEAMs have ONE dirty CPU and ONE dirty IO scheduler; don't block them).
 - `c_src/capture_android.cpp` (AAudio via dlopen), `c_src/capture_ios.mm`

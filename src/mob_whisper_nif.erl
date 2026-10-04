@@ -4,8 +4,12 @@
 %% priv/mob_plugin.exs) statically linked into the host app on device. On a
 %% host dev build nothing is linked, so on_load tolerates the failure and every
 %% function raises nif_not_loaded except nif_loaded/0, which returns false.
+%%
+%% transcribe/5 returns {ok, Ref, JobId} at once; the caller later receives
+%% {mob_whisper_result, Ref, {ok, Text} | {error, Reason}}. abort/2 cancels
+%% that job.
 -module(mob_whisper_nif).
--export([nif_loaded/0, load_model/1, transcribe/5, abort/1, capture_start/0, capture_stop/0]).
+-export([nif_loaded/0, load_model/1, transcribe/5, abort/2, capture_start/0, capture_stop/0]).
 -on_load(init/0).
 
 init() ->
@@ -23,7 +27,7 @@ load_model(_Path) ->
 transcribe(_Model, _Pcm, _Language, _Threads, _AudioCtx) ->
     erlang:nif_error(nif_not_loaded).
 
-abort(_Model) ->
+abort(_Model, _JobId) ->
     erlang:nif_error(nif_not_loaded).
 
 capture_start() ->

@@ -111,6 +111,10 @@ defmodule MobWhisper.EngineTest do
         send(test, {:transcribing, self()})
 
         receive do
+          :mob_whisper_abort -> send(test, :aborted)
+        end
+
+        receive do
           :finish -> {:ok, "too late"}
         end
       end
@@ -120,10 +124,70 @@ defmodule MobWhisper.EngineTest do
     :ok = MobWhisper.stop(self())
     assert_receive {:transcribing, task}
     :ok = MobWhisper.cancel(self())
-    assert_receive {:native, :abort, [_model]}
+    assert_receive :aborted
     send(task, :finish)
     refute_receive {:speech, :final, _}, 200
     assert %{session: nil} = MobWhisper.status()
+  end
+
+  test "without the NIF linked, start is :unavailable and the server survives" do
+    script(%{loaded?: false})
+    server = Process.whereis(MobWhisper.Server)
+
+    assert MobWhisper.start(self(), []) == {:error, :unavailable}
+    refute_received {:native, :capture_start, []}
+    assert Process.whereis(MobWhisper.Server) == server
+  end
+
+  test "a misconfigured model is :unavailable, not a crash" do
+    Application.put_env(:mob_whisper, :model, :large_v9)
+    restart_server()
+    on_exit(fn -> Application.put_env(:mob_whisper, :model, {:file, @model_path}) end)
+
+    assert MobWhisper.start(self(), []) == {:error, :unavailable}
+    assert MobWhisper.transcribe(FakeNative.speech_pcm(500)) == {:error, :unavailable}
+  end
+
+  test "a capture that fails at stop ends the session with one error" do
+    script(%{capture_stop: {:error, :audio}})
+    :ok = MobWhisper.start(self(), [])
+    assert_receive {:speech, :state, :listening}
+    :ok = MobWhisper.stop(self())
+    assert_receive {:speech, :error, :audio}
+    refute_receive {:speech, _, _}, 100
+    assert %{session: nil} = MobWhisper.status()
+  end
+
+  test "a crashing model load fails the waiting session, and the next one retries" do
+    script(%{load_model: fn _ -> raise "boom" end})
+    :ok = MobWhisper.start(self(), [])
+    :ok = MobWhisper.stop(self())
+    assert_receive {:speech, :error, :unavailable}
+
+    FakeNative.script(self())
+    :ok = MobWhisper.start(self(), [])
+    :ok = MobWhisper.stop(self())
+    assert_receive {:speech, :final, "hello world"}
+  end
+
+  test "cancel while waiting for the model: the model arriving later sends nothing" do
+    test = self()
+
+    script(%{
+      load_model: fn _ ->
+        send(test, {:loading, self()})
+        receive do: (:loaded -> {:ok, make_ref()})
+      end
+    })
+
+    :ok = MobWhisper.start(self(), [])
+    assert_receive {:loading, loader}
+    :ok = MobWhisper.stop(self())
+    :ok = MobWhisper.cancel(self())
+    send(loader, :loaded)
+    refute_receive {:speech, :final, _}, 200
+    refute_received {:native, :transcribe, _}
+    assert %{session: nil, model_state: :ready} = MobWhisper.status()
   end
 
   test "the session process dying releases the microphone" do

@@ -69,7 +69,7 @@ defmodule MobWhisper.MixProject do
 
   defp dev_dep do
     case System.get_env("MOB_DEV_PATH") do
-      nil -> {:mob_dev, "~> 0.7.12", only: [:dev, :test], runtime: false}
+      nil -> {:mob_dev, "~> 0.7.13", only: [:dev, :test], runtime: false}
       path -> {:mob_dev, path: path, only: [:dev, :test], runtime: false}
     end
   end

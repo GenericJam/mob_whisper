@@ -26,8 +26,13 @@ namespace {
 
 struct Model {
     whisper_context *ctx = nullptr;
-    std::mutex mu;                  // one whisper_full at a time per context
-    std::atomic<bool> abort{false};  // set by abort/1, polled by whisper.cpp
+    std::mutex mu;  // one whisper_full at a time per context
+    // Jobs are numbered from 1; abort/2 names the one to stop. A single slot
+    // is enough: the server runs one session job at a time, and naming the
+    // job (not "whatever runs next") means a stale abort can't hit a later
+    // job and an early one still stops a job queued behind the mutex.
+    std::atomic<uint64_t> next_id{0};
+    std::atomic<uint64_t> abort_id{0};
 };
 
 ErlNifResourceType *g_model_type = nullptr;
@@ -84,13 +89,12 @@ ERL_NIF_TERM load_model(ErlNifEnv *env, int, const ERL_NIF_TERM argv[]) {
     return ok(env, term);
 }
 
-bool should_abort(void *data) { return static_cast<Model *>(data)->abort.load(); }
-
 // One transcription, run on its own native thread: a Mob app's BEAM has a
 // single dirty CPU scheduler, and seconds of whisper inference there would
 // stall every other dirty NIF (crypto, …) for the duration.
 struct Job {
     Model *model;  // kept alive with enif_keep_resource until the job ends
+    uint64_t id;
     std::vector<float> samples;
     std::string language;
     int threads;
@@ -100,15 +104,16 @@ struct Job {
     ERL_NIF_TERM ref;
 };
 
+bool aborted(const Job &job) { return job.model->abort_id.load() == job.id; }
+
+bool should_abort(void *data) { return aborted(*static_cast<Job *>(data)); }
+
 ERL_NIF_TERM run_job(Job &job) {
     Model *m = job.model;
     ErlNifEnv *env = job.msg_env;
 
     std::lock_guard<std::mutex> lock(m->mu);
-    // An abort/1 that raced the previous job's finish must not cancel this one;
-    // one that lands before this point is lost, and the caller (who aborted)
-    // drops the result anyway.
-    m->abort.store(false);
+    if (aborted(job)) return error(env, "cancelled");
 
     whisper_full_params p = whisper_full_default_params(WHISPER_SAMPLING_GREEDY);
     p.n_threads = job.threads;
@@ -126,10 +131,10 @@ ERL_NIF_TERM run_job(Job &job) {
     p.audio_ctx = job.audio_ctx;
     p.greedy.best_of = 1;
     p.abort_callback = should_abort;
-    p.abort_callback_user_data = m;
+    p.abort_callback_user_data = &job;
 
     int rc = whisper_full(m->ctx, p, job.samples.data(), static_cast<int>(job.samples.size()));
-    if (m->abort.exchange(false)) return error(env, "cancelled");
+    if (aborted(job)) return error(env, "cancelled");
     if (rc != 0) return error(env, "transcribe_failed");
 
     std::string text;
@@ -152,9 +157,10 @@ void job_thread(Job *job) {
     delete job;
 }
 
-// transcribe(Model, Pcm, Language, Threads, AudioCtx) -> {ok, Ref} | {error, Reason}
+// transcribe(Model, Pcm, Language, Threads, AudioCtx) -> {ok, Ref, JobId} | {error, Reason}
 //   Starts the transcription and returns at once; the calling process later
 //   receives {mob_whisper_result, Ref, {ok, Text} | {error, cancelled | transcribe_failed}}.
+//   abort(Model, JobId) cancels it.
 //   Pcm: 16 kHz mono signed 16-bit little-endian samples.
 //   Language: ISO code ("en"), "auto" to detect.
 //   AudioCtx: encoder frames to run (0 = the full 30 s window); see
@@ -173,6 +179,8 @@ ERL_NIF_TERM transcribe(ErlNifEnv *env, int, const ERL_NIF_TERM argv[]) {
 
     Job *job = new Job();
     job->model = m;
+    const uint64_t id = m->next_id.fetch_add(1) + 1;
+    job->id = id;
     job->language = language;
     job->threads = threads;
     job->audio_ctx = audio_ctx;
@@ -196,16 +204,20 @@ ERL_NIF_TERM transcribe(ErlNifEnv *env, int, const ERL_NIF_TERM argv[]) {
         delete job;
         return error(env, "transcribe_failed");
     }
-    return ok(env, ref);
+    // Not job->id: the detached thread may already have finished and freed it.
+    return enif_make_tuple3(env, atom(env, "ok"), ref, enif_make_uint64(env, id));
 }
 
-// abort(Model) -> ok. Makes a running transcribe/5 return {error, cancelled}.
+// abort(Model, JobId) -> ok. Makes that transcribe/5 job reply {error, cancelled}
+// promptly, whether it is running or still waiting for the model.
 ERL_NIF_TERM abort_transcription(ErlNifEnv *env, int, const ERL_NIF_TERM argv[]) {
     Model *m = nullptr;
-    if (!enif_get_resource(env, argv[0], g_model_type, reinterpret_cast<void **>(&m))) {
+    ErlNifUInt64 id = 0;
+    if (!enif_get_resource(env, argv[0], g_model_type, reinterpret_cast<void **>(&m)) ||
+        !enif_get_uint64(env, argv[1], &id)) {
         return enif_make_badarg(env);
     }
-    m->abort.store(true);
+    m->abort_id.store(id);
     return atom(env, "ok");
 }
 
@@ -244,7 +256,7 @@ ErlNifFunc nif_funcs[] = {
     {"nif_loaded", 0, nif_loaded, 0},
     {"load_model", 1, load_model, ERL_NIF_DIRTY_JOB_IO_BOUND},
     {"transcribe", 5, transcribe, 0},
-    {"abort", 1, abort_transcription, 0},
+    {"abort", 2, abort_transcription, 0},
     {"capture_start", 0, capture_start, ERL_NIF_DIRTY_JOB_IO_BOUND},
     {"capture_stop", 0, capture_stop, ERL_NIF_DIRTY_JOB_IO_BOUND},
 };

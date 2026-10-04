@@ -2,9 +2,10 @@ name: tests
 
 # CI for the plugin's host-side Elixir surface — the same gate mob core runs,
 # so a PR gets a green check instead of relying only on each contributor's
-# local pre-push hook. Native code (zig/ObjC/Kotlin) is compiled by the host
-# app at deploy time, not here; the FFI-seam invariants are guarded by
-# source-level tests (see test/mob_camera_test.exs).
+# local pre-push hook. The native code (c_src: the NIF, capture, vendored
+# whisper.cpp) is compiled by the host app's native build at deploy time, not
+# here; the session logic is tested against a scripted native layer
+# (test/support/fake_native.ex).
 
 on:
   push:

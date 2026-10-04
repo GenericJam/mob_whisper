@@ -88,7 +88,7 @@ with `MobSpeech`'s `:language`, untested.
   (`capture_android.cpp`, `capture_ios.mm`) and a vendored, CPU-only subset of
   whisper.cpp v1.9.4 (`scripts/vendor_whisper.sh` regenerates it). The host's
   native build compiles it into a static archive (a `cpp_archive` plugin NIF;
-  needs mob_dev ≥ 0.7.12).
+  needs mob_dev ≥ 0.7.13).
 - Transcription runs on its own native thread and replies with a message: a Mob
   app's BEAM has one dirty CPU scheduler, which seconds of inference would
   otherwise hold.

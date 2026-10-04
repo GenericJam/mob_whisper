@@ -22,4 +22,4 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versioning: [S
 - Device-verified on a Moto G 2021 (Android 11, Snapdragon 662): Mac-spoken
   sentences transcribed correctly, 1.4-2.6 s from stop to text for 5-10 s of
   speech with `:base_en`. iOS builds but is not device-verified.
-- Requires mob_dev ≥ 0.7.12 (cpp_archive C sources and x86_64).
+- Requires mob_dev ≥ 0.7.13 (cpp_archive C sources and x86_64).

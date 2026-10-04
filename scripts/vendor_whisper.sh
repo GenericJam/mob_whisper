@@ -4,9 +4,10 @@
 #   scripts/vendor_whisper.sh [tag]      # default: the pinned tag below
 #
 # Copies only what the cpp_archive build in priv/mob_plugin.exs needs (the
-# whisper model code, ggml core, the ggml CPU backend with its ARM kernels)
-# into c_src/whisper.cpp/, plus whisper.cpp's LICENSE and a VERSION stamp.
-# GPU backends, x86-only kernels, examples and models are left out.
+# whisper model code, ggml core, the ggml CPU backend with its ARM and x86
+# kernels: arm64/armv7 phones and the x86_64 emulator) into c_src/whisper.cpp/,
+# plus whisper.cpp's LICENSE and a VERSION stamp. GPU backends, other CPU
+# architectures, examples and models are left out.
 # After bumping the tag: update the source list in priv/mob_plugin.exs if
 # upstream added or renamed files, and the version in README/CHANGELOG.
 set -euo pipefail
@@ -52,3 +53,6 @@ cp -R "$SRC/ggml/src/ggml-cpu/arch/arm" "$SRC/ggml/src/ggml-cpu/arch/x86" "$DEST
 mkdir -p "$DEST/ggml/src/ggml-cpu/llamafile" "$DEST/ggml/src/ggml-cpu/amx"
 cp "$SRC/ggml/src/ggml-cpu/llamafile/sgemm.h" "$DEST/ggml/src/ggml-cpu/llamafile/"
 cp "$SRC"/ggml/src/ggml-cpu/amx/*.h "$DEST/ggml/src/ggml-cpu/amx/"
+
+echo "$TAG $(git -C "$SRC" rev-parse HEAD)" > "$DEST/VERSION"
+echo "vendored whisper.cpp $TAG into $DEST"

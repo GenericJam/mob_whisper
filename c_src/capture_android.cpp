@@ -77,6 +77,10 @@ std::mutex g_mu;   // guards g_samples between the reader thread and capture_sto
 AAudioStream *g_stream = nullptr;
 std::thread g_reader;
 std::atomic<bool> g_running{false};
+// Set when a read fails mid-recording (e.g. AAUDIO_ERROR_DISCONNECTED on a
+// headset/Bluetooth route change): the recording is truncated, so stop
+// reports "audio" rather than transcribing half an utterance.
+std::atomic<bool> g_failed{false};
 std::vector<int16_t> g_samples;  // mono, at g_rate
 int g_rate = kTargetRate;
 
@@ -87,6 +91,7 @@ void reader_loop(const AAudioApi *a, AAudioStream *stream, int channels, size_t 
         aaudio_result_t n = a->read(stream, buf.data(), 1024, 100 * 1000 * 1000LL);
         if (n < 0) {
             LOGW("AAudioStream_read: %s", a->resultText(n));
+            g_failed.store(true);
             break;
         }
         std::lock_guard<std::mutex> lock(g_mu);
@@ -140,6 +145,7 @@ const char *capture_start() {
         g_samples.clear();
         g_samples.reserve(static_cast<size_t>(g_rate) * 10);
     }
+    g_failed.store(false);
     g_running.store(true);
     g_reader = std::thread(reader_loop, a, stream, channels,
                            static_cast<size_t>(g_rate) * kMaxSeconds);
@@ -158,9 +164,9 @@ const char *capture_stop(std::vector<int16_t> &out) {
     g_stream = nullptr;
 
     std::lock_guard<std::mutex> lock(g_mu);
-    out = resample_to_16k(g_samples, g_rate);
+    if (!g_failed.load()) out = resample_to_16k(g_samples, g_rate);
     std::vector<int16_t>().swap(g_samples);
-    return nullptr;
+    return g_failed.load() ? "audio" : nullptr;
 }
 
 }  // namespace mob_whisper

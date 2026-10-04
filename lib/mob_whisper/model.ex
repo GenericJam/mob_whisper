@@ -42,6 +42,11 @@ defmodule MobWhisper.Model do
   @spec names() :: [name()]
   def names, do: Map.keys(@catalogue)
 
+  @doc "Whether `spec` is a catalogue name or `{:file, path}`."
+  @spec valid?(term()) :: boolean()
+  def valid?({:file, path}), do: is_binary(path)
+  def valid?(name), do: Map.has_key?(@catalogue, name)
+
   @doc "Catalogue entry for `name`: `%{file:, sha256:, bytes:, english_only:, url:}`."
   @spec info(name()) :: map()
   def info(name) do

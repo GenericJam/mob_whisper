@@ -78,7 +78,8 @@ defmodule MobWhisper.Server do
     do: {:reply, {:error, :busy}, state}
 
   def handle_call({:start, pid, opts}, _from, state) do
-    with {:ok, language} <- language(opts[:language], state.model_spec),
+    with :ok <- linked(state.native),
+         {:ok, language} <- language(opts[:language], state.model_spec),
          :ok <- state.native.capture_start() do
       session = %{
         pid: pid,
@@ -225,7 +226,7 @@ defmodule MobWhisper.Server do
   defp abandon(%{session: s} = state) do
     case s do
       %{phase: :listening} -> state.native.capture_stop()
-      %{task: %Task{}} -> state.native.abort(state.model)
+      %{task: %Task{pid: pid}} -> send(pid, :mob_whisper_abort)
       _ -> :ok
     end
 
@@ -289,15 +290,22 @@ defmodule MobWhisper.Server do
 
   # ── Helpers ──────────────────────────────────────────────────────────────
 
+  # A host build, or an app that didn't activate the plugin, has no NIF: say
+  # so instead of letting nif_not_loaded crash the server (and with it the
+  # MobSpeech session, silently).
+  defp linked(native), do: if(native.loaded?(), do: :ok, else: {:error, :unavailable})
+
   @doc false
   # The whisper language code for a MobSpeech `:language` (BCP-47 or nil).
   # English-only models accept nil or any "en" tag; others take the primary
-  # subtag, or "auto" (detect) for nil.
-  @spec language(String.t() | nil, Model.spec()) :: {:ok, String.t()} | {:error, :language}
+  # subtag, or "auto" (detect) for nil. A misconfigured model is :unavailable.
+  @spec language(String.t() | nil, term()) ::
+          {:ok, String.t()} | {:error, :language | :unavailable}
   def language(tag, spec) do
     primary = tag && tag |> String.split(["-", "_"]) |> hd() |> String.downcase()
 
     cond do
+      not Model.valid?(spec) -> {:error, :unavailable}
       Model.english_only?(spec) and primary in [nil, "en"] -> {:ok, "en"}
       Model.english_only?(spec) -> {:error, :language}
       primary == nil -> {:ok, "auto"}
@@ -315,6 +323,8 @@ defmodule MobWhisper.Server do
   def speech_reason({:download, _}), do: :network
   def speech_reason(:checksum_mismatch), do: :network
   def speech_reason(reason) when reason in [:load_failed, :enoent], do: :unavailable
+  # The model or transcription task raised (e.g. storage dir unavailable).
+  def speech_reason({:crashed, _}), do: :unavailable
   def speech_reason(:transcribe_failed), do: :client
   def speech_reason(other), do: other
 
