@@ -6,7 +6,7 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versioning: [S
 
 ---
 
-## [Unreleased]
+## [0.1.1] - 2026-10-09
 
 ### Added
 - **On-device self-test** (MOB-411). `MobWhisper.SelfTest` implements
@@ -15,8 +15,10 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versioning: [S
   `nif_loaded/0` is `true`, `load_model/1` on a missing path answers
   `{:error, :load_failed}` (whisper.cpp ran), `capture_stop/0` while idle
   answers `{:error, :not_capturing}` (the capture backend is linked). Run it
-  with `mix mob.selftest` from a host app (mob_dev 0.7.17). Requires mob
-  0.9.15.
+  with `mix mob.selftest` from a host app (mob_dev 0.7.17).
+
+### Changed
+- Requires mob >= 0.9.15 (was `~> 0.9`), for `Mob.Plugin.SelfTest`.
 
 ## [0.1.0] - 2026-10-03
 
