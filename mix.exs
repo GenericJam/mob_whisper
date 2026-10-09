@@ -43,7 +43,7 @@ defmodule MobWhisper.MixProject do
     # ships. MOB_SPEECH_PATH / MOB_DEV_PATH point at local checkouts while a
     # needed version isn't on Hex yet.
     [
-      {:mob, "~> 0.9"},
+      {:mob, "~> 0.9.15"},
       speech_dep(),
       {:req, "~> 0.5"},
       {:plug, "~> 1.16", only: [:dev, :test]},
@@ -69,7 +69,7 @@ defmodule MobWhisper.MixProject do
 
   defp dev_dep do
     case System.get_env("MOB_DEV_PATH") do
-      nil -> {:mob_dev, "~> 0.7.13", only: [:dev, :test], runtime: false}
+      nil -> {:mob_dev, "~> 0.7.17", only: [:dev, :test], runtime: false}
       path -> {:mob_dev, path: path, only: [:dev, :test], runtime: false}
     end
   end

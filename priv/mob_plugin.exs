@@ -74,6 +74,9 @@ end
   name: :mob_whisper,
   mob_version: "~> 0.9",
   plugin_spec_version: 1,
+  # On-device proof for `mix mob.selftest` / mob_ci: three NIF answers that
+  # need no model and no microphone (see Mob.Plugin.SelfTest).
+  selftest: MobWhisper.SelfTest,
   nifs: [
     nif.(:android, "c_src/capture_android.cpp"),
     nif.(:ios, "c_src/capture_ios.mm")
