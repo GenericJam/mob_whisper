@@ -4,6 +4,9 @@ whisper = "c_src/whisper.cpp"
 # capture. Same list for both platforms except the capture source; the
 # ggml_arch_* wrappers pick ARM or x86 kernels by compile target (Android
 # builds arm64, armv7 and the x86_64 emulator from this one list).
+# ggml-backend-dl.cpp stays in although no backend is ever dlopen'd:
+# ggml-backend-reg.cpp references its dl_* helpers, and a final link that
+# doesn't dead-strip (mix mob.release --ios) fails without them (MOB-470).
 common_sources =
   [
     "c_src/mob_whisper_nif.cpp",
@@ -13,7 +16,7 @@ common_sources =
     "#{whisper}/src/whisper.cpp"
   ] ++
     Enum.map(
-      ~w(ggml.c ggml.cpp ggml-alloc.c ggml-backend.cpp ggml-backend-meta.cpp
+      ~w(ggml.c ggml.cpp ggml-alloc.c ggml-backend.cpp ggml-backend-dl.cpp ggml-backend-meta.cpp
          ggml-backend-reg.cpp ggml-opt.cpp ggml-quants.c ggml-threading.cpp gguf.cpp),
       &"#{whisper}/ggml/src/#{&1}"
     ) ++

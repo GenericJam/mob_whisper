@@ -31,9 +31,13 @@ cp "$SRC/src/whisper.cpp" "$SRC/src/whisper-arch.h" "$DEST/src/"
 cp "$SRC"/ggml/include/{ggml.h,ggml-alloc.h,ggml-backend.h,ggml-cpp.h,ggml-cpu.h,ggml-opt.h,gguf.h} \
   "$DEST/ggml/include/"
 
-# ggml core (CPU-only build: no backend dlopen, so ggml-backend-dl.cpp stays out)
-for f in ggml.c ggml.cpp ggml-alloc.c ggml-backend.cpp ggml-backend-meta.cpp ggml-backend-reg.cpp \
-  ggml-opt.cpp ggml-quants.c ggml-threading.cpp gguf.cpp \
+# ggml core. ggml-backend-dl.cpp stays in even in this CPU-only build:
+# ggml-backend-reg.cpp calls its dl_* helpers unconditionally (ggml_backend_load*),
+# and upstream's CMake always compiles the two together (both in the `ggml`
+# target). Without it the archive only links when the final link dead-strips
+# (MOB-470).
+for f in ggml.c ggml.cpp ggml-alloc.c ggml-backend.cpp ggml-backend-dl.cpp ggml-backend-meta.cpp \
+  ggml-backend-reg.cpp ggml-opt.cpp ggml-quants.c ggml-threading.cpp gguf.cpp \
   ggml-backend-impl.h ggml-backend-dl.h ggml-common.h ggml-impl.h ggml-quants.h ggml-threading.h \
   ggml-feats.h; do
   cp "$SRC/ggml/src/$f" "$DEST/ggml/src/"
