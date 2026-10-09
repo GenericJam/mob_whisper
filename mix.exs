@@ -43,7 +43,7 @@ defmodule MobWhisper.MixProject do
     # ships. MOB_SPEECH_PATH / MOB_DEV_PATH point at local checkouts while a
     # needed version isn't on Hex yet.
     [
-      {:mob, "~> 0.9.15"},
+      {:mob, "~> 0.9 and >= 0.9.15"},
       speech_dep(),
       {:req, "~> 0.5"},
       {:plug, "~> 1.16", only: [:dev, :test]},

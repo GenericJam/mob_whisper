@@ -16,7 +16,9 @@ defmodule MobWhisper.SelfTest do
        AudioQueue) is linked and answers.
 
   Transcription itself needs a model (about 60 MB) and is the feature, not the
-  proof.
+  proof. Run it while the host is not recording: `capture_stop/0` is only a
+  no-op while idle, and would otherwise stop the host's capture (the test
+  then fails visibly with the returned PCM).
   """
   @behaviour Mob.Plugin.SelfTest
 
@@ -41,7 +43,9 @@ defmodule MobWhisper.SelfTest do
     end
   end
 
-  defp check(name, call, expected) do
+  @doc false
+  @spec check(atom(), (-> term()), term()) :: :ok | {:fail, String.t()}
+  def check(name, call, expected) do
     case call.() do
       ^expected -> :ok
       other -> {:fail, "#{name} returned #{inspect(other)}, expected #{inspect(expected)}"}
