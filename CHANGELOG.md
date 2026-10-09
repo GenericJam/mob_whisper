@@ -6,7 +6,7 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versioning: [S
 
 ---
 
-## [0.1.2] - 2026-10-09
+## [Unreleased]
 
 ### Fixed
 - **`mix mob.release --ios` failed to link** with undefined `dl_get_sym`,
